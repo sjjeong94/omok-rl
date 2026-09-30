@@ -1,0 +1,25 @@
+[project]
+name = "omok-rl"
+version = "0.1.0"
+description = "Step-by-step reinforcement learning study with an Omok (Gomoku) agent"
+authors = [
+    { name = "sjjeong94", email = "sjjeong94@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.5.3",
+    "omok[fast]==0.1.0",
+]
+
+[project.scripts]
+omok-arena = "omok_rl.arena:main"
+
+[build-system]
+requires = ["uv_build>=0.11.32,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "matplotlib>=3.11.2",
+    "pytest>=9.1.1",
+]

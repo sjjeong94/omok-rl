@@ -213,7 +213,7 @@ Raw logs, checkpoints, and TensorBoard runs are **not** committed to `docs/`. On
 
 | Stage | Document | Status |
 |---|---|---|
-| 0 | Foundations — Environment & Evaluation | Not started |
+| 0 | [Foundations — Environment & Evaluation](stage0-foundations/README.md) | Done |
 | 1 | Tabular RL — Tic-Tac-Toe | Not started |
 | 2 | Value-Based Deep RL — DQN | Not started |
 | 3 | Policy Gradients — REINFORCE → A2C → PPO | Not started |

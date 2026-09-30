@@ -12,14 +12,13 @@ The game environment is the [`omok`](https://pypi.org/project/omok/0.1.0/) packa
 ## 1. Setup
 
 ```bash
-uv init --python 3.11          # create pyproject.toml (omok requires Python >= 3.11)
-uv add "omok[fast]" numpy      # fast: numba-compiled Renju forbidden-move check (~30x faster)
-uv add torch                   # used from Stage 2 on
-uv add --dev pytest matplotlib tensorboard
-
+uv sync                        # create .venv with Python 3.12, omok[fast], numpy, and dev tools
+uv run pytest                  # run the tests
+uv run omok-arena heuristic random --env omok9 --games 200   # play a match between two agents
 uv run python -m omok          # play in the browser (http://127.0.0.1:8000)
-uv run pytest
 ```
+
+`omok[fast]` compiles the Renju forbidden-move check with numba (~30x faster). PyTorch will be added in Stage 2 (`uv add torch`).
 
 ## 2. `omok` Package Cheat Sheet
 
@@ -42,7 +41,7 @@ from omok.env import BoardGame
 class TicTacToe(BoardGame):   # 3x3, three in a row
     size, win = 3, 3
 
-class MiniOmok(BoardGame):    # 6x6, four in a row (freestyle)
+class Omok6(BoardGame):       # 6x6, four in a row (freestyle)
     size, win = 6, 4
 ```
 
@@ -128,11 +127,14 @@ omok-rl/
 ├── pyproject.toml
 ├── README.md
 ├── src/omok_rl/
-│   ├── envs.py            # small-board envs (TicTacToe, MiniOmok) and wrappers
+│   ├── envs.py            # tictactoe, omok6, omok9, freestyle15, renju15
 │   ├── agents/            # random, heuristic, tabular, dqn, ppo, mcts, alphazero
-│   ├── arena.py           # matches & win-rate/Elo evaluation
+│   ├── arena.py           # matches & win-rate evaluation (omok-arena CLI)
+│   ├── viz.py             # board drawing for docs figures
 │   └── utils/             # logging, checkpoints, replay buffer
 ├── scripts/               # per-stage training/evaluation scripts
+│   ├── stage0_baselines.py
+│   ├── plot_stage0.py
 │   ├── stage1_tabular.py
 │   ├── stage2_dqn.py
 │   └── ...
@@ -142,7 +144,7 @@ omok-rl/
 
 ```bash
 uv run python scripts/stage1_tabular.py
-uv run python -m omok_rl.arena --black ppo --white heuristic --games 200
+uv run omok-arena ppo heuristic --env omok9 --games 200   # colors alternate every game
 ```
 
 ## 5. Evaluation
@@ -155,7 +157,7 @@ uv run python -m omok_rl.arena --black ppo --white heuristic --games 200
 
 ## 6. Progress Checklist
 
-- [ ] Stage 0 — Environment, Random/Heuristic agents, Arena
+- [x] Stage 0 — Environment, Random/Heuristic agents, Arena ([docs](docs/stage0-foundations/README.md))
 - [ ] Stage 1 — Tabular MC / TD / Q-learning (tic-tac-toe)
 - [ ] Stage 2 — DQN family (6x6 → 9x9)
 - [ ] Stage 3 — REINFORCE / A2C / PPO
