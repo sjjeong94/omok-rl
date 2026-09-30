@@ -6,7 +6,7 @@ from omok_rl.agents.minimax import MinimaxAgent
 from omok_rl.agents.random_agent import RandomAgent
 from omok_rl.agents.tabular import AfterstateAgent, QAgent, TabularAgent
 
-AGENTS = ('random', 'heuristic', 'minimax', 'pretrained0', 'pretrained1', '<path to a saved tabular agent .pkl>')
+AGENTS = ('random', 'heuristic', 'minimax', 'pretrained0', 'pretrained1', '<saved tabular agent .pkl>', '<saved DQN .pt>')
 
 
 def make_agent(name: str, seed: int | None = None) -> Agent:
@@ -17,6 +17,10 @@ def make_agent(name: str, seed: int | None = None) -> Agent:
         return HeuristicAgent(seed)
     if name == 'minimax':
         return MinimaxAgent(seed)
+    if name.endswith('.pt'):
+        from omok_rl.agents.dqn import DQNAgent  # loads torch
+
+        return DQNAgent.load(name)
     if name.endswith('.pkl'):
         agent = TabularAgent.load(name)
         agent.rng = np.random.default_rng(seed)

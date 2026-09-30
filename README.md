@@ -18,7 +18,7 @@ uv run omok-arena heuristic random --env omok9 --games 200   # play a match betw
 uv run python -m omok          # play in the browser (http://127.0.0.1:8000)
 ```
 
-`omok[fast]` compiles the Renju forbidden-move check with numba (~30x faster). PyTorch will be added in Stage 2 (`uv add torch`).
+`omok[fast]` compiles the Renju forbidden-move check with numba (~30x faster). PyTorch (Stage 2+) uses the GPU when CUDA is available.
 
 ## 2. `omok` Package Cheat Sheet
 
@@ -130,15 +130,19 @@ omok-rl/
 │   ├── envs.py            # tictactoe, omok6, omok9, freestyle15, renju15
 │   ├── agents/            # random, heuristic, minimax, tabular, (dqn, ppo, mcts, alphazero)
 │   ├── symmetry.py        # canonical board keys under the 8 symmetries
+│   ├── nets.py            # Q-networks (CNN, MLP)
+│   ├── replay.py          # replay buffer with two-player n-step returns
+│   ├── dqn.py             # DQN self-play training (python -m omok_rl.dqn)
 │   ├── arena.py           # matches & win-rate evaluation (omok-arena CLI)
 │   ├── viz.py             # board drawing for docs figures
-│   └── utils/             # logging, checkpoints, replay buffer
+│   └── ...                # more modules in later stages
 ├── scripts/               # per-stage training/evaluation scripts
 │   ├── stage0_baselines.py
 │   ├── plot_stage0.py
 │   ├── stage1_tabular.py
 │   ├── plot_stage1.py
 │   ├── stage2_dqn.py
+│   ├── plot_stage2.py
 │   └── ...
 ├── docs/                  # per-stage study log & experiment results (see docs/README.md)
 └── tests/
@@ -161,7 +165,7 @@ uv run omok-arena ppo heuristic --env omok9 --games 200   # colors alternate eve
 
 - [x] Stage 0 — Environment, Random/Heuristic agents, Arena ([docs](docs/stage0-foundations/README.md))
 - [x] Stage 1 — Tabular MC / TD / Sarsa / Q-learning (tic-tac-toe) ([docs](docs/stage1-tabular/README.md))
-- [ ] Stage 2 — DQN family (6x6 → 9x9)
+- [x] Stage 2 — DQN family (6x6 → 9x9) ([docs](docs/stage2-dqn/README.md))
 - [ ] Stage 3 — REINFORCE / A2C / PPO
 - [ ] Stage 4 — Minimax, MCTS
 - [ ] Stage 5 — AlphaZero (9x9 → 15x15)

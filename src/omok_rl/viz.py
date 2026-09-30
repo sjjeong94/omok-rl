@@ -32,5 +32,6 @@ def draw_board(ax: plt.Axes, size: int, moves: list[int], numbers: bool = True, 
     ax.set_xlim(-0.7, size - 0.3)
     ax.set_ylim(size - 0.3, -0.7)  # row 0 at the top, like print(env)
     ax.set_aspect('equal')
+    ax.grid(False)
     for spine in ax.spines.values():
         spine.set_visible(False)

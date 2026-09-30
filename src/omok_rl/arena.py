@@ -4,6 +4,7 @@ Colors alternate every game (agent A is black in even games), because in Omok th
 has a large advantage. Results are always reported per color.
 
     uv run omok-arena heuristic random --env omok9 --games 200
+    uv run omok-arena a.pt heuristic --env omok9 --games 200 --openings 4   # deterministic agents
 """
 
 import argparse
@@ -57,6 +58,10 @@ class MatchResult:
         total = sum(1 for g in self.games if color is None or g.a_color == color)
         return self.count(outcome, color) / total if total else float('nan')
 
+    def distinct(self) -> int:
+        """Number of different games (move sequences) played."""
+        return len({tuple(g.moves) for g in self.games})
+
     def score(self) -> float:
         """A's average score (win = 1, draw = 0.5, loss = 0)."""
         return self.rate('win') + 0.5 * self.rate('draw')
@@ -70,17 +75,40 @@ class MatchResult:
         for label, color in (('as black', PLAYER_BLACK), ('as white', PLAYER_WHITE), ('total', None)):
             rates = ''.join(f'{self.rate(o, color):8.1%}' for o in ('win', 'draw', 'loss'))
             lines.append(f'{label:10}{rates}')
-        lines.append(f'score: {self.score():.3f}, game length: {np.mean(lengths):.1f} moves (mean)')
+        lines.append(f'score: {self.score():.3f}, game length: {np.mean(lengths):.1f} moves (mean), '
+                     f'{self.distinct()} distinct games')
         return '\n'.join(lines)
 
 
-def evaluate(agent_a: Agent, agent_b: Agent, env_name: str, n_games: int) -> MatchResult:
-    """Play `n_games` between A and B on fresh `env_name` boards, alternating colors."""
+def random_opening(env_name: str, plies: int, rng: np.random.Generator) -> list[int]:
+    """`plies` uniformly random legal moves from the empty board (that don't end the game)."""
+    while True:
+        env = make_env(env_name)
+        for _ in range(plies):
+            env.move(int(rng.choice(np.flatnonzero(env.get_legal_mask()))))
+        if not env.is_done():
+            return env.get_move_history()
+
+
+def evaluate(agent_a: Agent, agent_b: Agent, env_name: str, n_games: int, opening_plies: int = 0,
+             seed: int | None = None) -> MatchResult:
+    """Play `n_games` between A and B on fresh `env_name` boards, alternating colors.
+
+    With `opening_plies > 0`, each pair of games starts from the same random opening of that many moves, once with
+    A as black and once with A as white. Deterministic agents otherwise replay the same game over and over.
+    """
     result = MatchResult(agent_a.name, agent_b.name, env_name)
+    rng = np.random.default_rng(seed)
+    opening = []
     for i in range(n_games):
         a_is_black = i % 2 == 0
+        if a_is_black and opening_plies:
+            opening = random_opening(env_name, opening_plies, rng)
+        env = make_env(env_name)
+        for pos in opening:
+            env.move(pos)
         black, white = (agent_a, agent_b) if a_is_black else (agent_b, agent_a)
-        env = play_game(make_env(env_name), black, white)
+        play_game(env, black, white)
         a_color = PLAYER_BLACK if a_is_black else PLAYER_WHITE
         result.games.append(Game(a_color, env.get_winner(), env.get_move_history()))
     return result
@@ -92,6 +120,8 @@ def main():
     parser.add_argument('agent_b', help=f'one of {AGENTS}')
     parser.add_argument('--env', default='omok9', choices=list(ENVS))
     parser.add_argument('--games', type=int, default=100)
+    parser.add_argument('--openings', type=int, default=0, metavar='PLIES',
+                        help='start each pair of games from the same random opening of PLIES moves')
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--out', help='save every game as JSON to this path')
     args = parser.parse_args()
@@ -99,7 +129,7 @@ def main():
     np.random.seed(args.seed)  # the pretrained agent uses the global random state
     agent_a = make_agent(args.agent_a, seed=args.seed)
     agent_b = make_agent(args.agent_b, seed=args.seed + 1)
-    result = evaluate(agent_a, agent_b, args.env, args.games)
+    result = evaluate(agent_a, agent_b, args.env, args.games, args.openings, seed=args.seed)
     print(result.summary())
     if args.out:
         with open(args.out, 'w') as f:
