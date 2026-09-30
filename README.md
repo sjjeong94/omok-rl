@@ -136,7 +136,7 @@ omok-rl/
 │   ├── stage1_tabular.py
 │   ├── stage2_dqn.py
 │   └── ...
-├── notes/                 # per-stage study notes & experiment results
+├── docs/                  # per-stage study log & experiment results (see docs/README.md)
 └── tests/
 ```
 
@@ -151,7 +151,7 @@ uv run python -m omok_rl.arena --black ppo --white heuristic --games 200
 - **Alternate colors**: black has the advantage in Omok, so always play an equal number of games as each color
 - **Elo rating**: round-robin among checkpoints to track growth across generations
 - **Final benchmark**: `omok.OmokAgent(model_index=0/1)`
-- Log experiments with TensorBoard (or CSV), and write up results in `notes/` at the end of each stage
+- Log experiments with TensorBoard (or CSV), and record results in `docs/` following the [documentation guidelines](docs/README.md)
 
 ## 6. Progress Checklist
 
