@@ -88,8 +88,8 @@ def evaluate(agent_a: Agent, agent_b: Agent, env_name: str, n_games: int) -> Mat
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('agent_a', choices=AGENTS)
-    parser.add_argument('agent_b', choices=AGENTS)
+    parser.add_argument('agent_a', help=f'one of {AGENTS}')
+    parser.add_argument('agent_b', help=f'one of {AGENTS}')
     parser.add_argument('--env', default='omok9', choices=list(ENVS))
     parser.add_argument('--games', type=int, default=100)
     parser.add_argument('--seed', type=int, default=0)

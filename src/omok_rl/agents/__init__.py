@@ -1,8 +1,12 @@
+import numpy as np
+
 from omok_rl.agents.base import Agent
 from omok_rl.agents.heuristic import HeuristicAgent
+from omok_rl.agents.minimax import MinimaxAgent
 from omok_rl.agents.random_agent import RandomAgent
+from omok_rl.agents.tabular import AfterstateAgent, QAgent, TabularAgent
 
-AGENTS = ('random', 'heuristic', 'pretrained0', 'pretrained1')
+AGENTS = ('random', 'heuristic', 'minimax', 'pretrained0', 'pretrained1', '<path to a saved tabular agent .pkl>')
 
 
 def make_agent(name: str, seed: int | None = None) -> Agent:
@@ -11,6 +15,12 @@ def make_agent(name: str, seed: int | None = None) -> Agent:
         return RandomAgent(seed)
     if name == 'heuristic':
         return HeuristicAgent(seed)
+    if name == 'minimax':
+        return MinimaxAgent(seed)
+    if name.endswith('.pkl'):
+        agent = TabularAgent.load(name)
+        agent.rng = np.random.default_rng(seed)
+        return agent
     if name in ('pretrained0', 'pretrained1'):
         from omok_rl.agents.pretrained import PretrainedAgent  # loads onnxruntime
 
@@ -18,4 +28,5 @@ def make_agent(name: str, seed: int | None = None) -> Agent:
     raise ValueError(f'unknown agent {name!r}, choose from {list(AGENTS)}')
 
 
-__all__ = ['AGENTS', 'Agent', 'HeuristicAgent', 'RandomAgent', 'make_agent']
+__all__ = ['AGENTS', 'AfterstateAgent', 'Agent', 'HeuristicAgent', 'MinimaxAgent', 'QAgent', 'RandomAgent',
+           'TabularAgent', 'make_agent']

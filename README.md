@@ -128,7 +128,8 @@ omok-rl/
 ├── README.md
 ├── src/omok_rl/
 │   ├── envs.py            # tictactoe, omok6, omok9, freestyle15, renju15
-│   ├── agents/            # random, heuristic, tabular, dqn, ppo, mcts, alphazero
+│   ├── agents/            # random, heuristic, minimax, tabular, (dqn, ppo, mcts, alphazero)
+│   ├── symmetry.py        # canonical board keys under the 8 symmetries
 │   ├── arena.py           # matches & win-rate evaluation (omok-arena CLI)
 │   ├── viz.py             # board drawing for docs figures
 │   └── utils/             # logging, checkpoints, replay buffer
@@ -136,6 +137,7 @@ omok-rl/
 │   ├── stage0_baselines.py
 │   ├── plot_stage0.py
 │   ├── stage1_tabular.py
+│   ├── plot_stage1.py
 │   ├── stage2_dqn.py
 │   └── ...
 ├── docs/                  # per-stage study log & experiment results (see docs/README.md)
@@ -158,7 +160,7 @@ uv run omok-arena ppo heuristic --env omok9 --games 200   # colors alternate eve
 ## 6. Progress Checklist
 
 - [x] Stage 0 — Environment, Random/Heuristic agents, Arena ([docs](docs/stage0-foundations/README.md))
-- [ ] Stage 1 — Tabular MC / TD / Q-learning (tic-tac-toe)
+- [x] Stage 1 — Tabular MC / TD / Sarsa / Q-learning (tic-tac-toe) ([docs](docs/stage1-tabular/README.md))
 - [ ] Stage 2 — DQN family (6x6 → 9x9)
 - [ ] Stage 3 — REINFORCE / A2C / PPO
 - [ ] Stage 4 — Minimax, MCTS

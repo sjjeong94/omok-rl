@@ -73,7 +73,10 @@ class HeuristicAgent(Agent):
         scores[~env.get_legal_mask()] = -np.inf
         return scores
 
-    def act(self, env: BoardGame) -> int:
+    def greedy_actions(self, env: BoardGame) -> list[int]:
+        """All moves tied for the best score."""
         scores = self.scores(env)
-        best = np.flatnonzero(scores == scores.max())
-        return int(self.rng.choice(best))
+        return [int(a) for a in np.flatnonzero(scores == scores.max())]
+
+    def act(self, env: BoardGame) -> int:
+        return int(self.rng.choice(self.greedy_actions(env)))
