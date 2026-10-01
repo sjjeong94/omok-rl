@@ -128,11 +128,12 @@ omok-rl/
 ├── README.md
 ├── src/omok_rl/
 │   ├── envs.py            # tictactoe, omok6, omok9, freestyle15, renju15
-│   ├── agents/            # random, heuristic, minimax, tabular, (dqn, ppo, mcts, alphazero)
+│   ├── agents/            # random, heuristic, minimax, tabular, dqn, policy, (mcts, alphazero)
 │   ├── symmetry.py        # canonical board keys under the 8 symmetries
-│   ├── nets.py            # Q-networks (CNN, MLP)
+│   ├── nets.py            # Q-networks (CNN, MLP), policy-value network
 │   ├── replay.py          # replay buffer with two-player n-step returns
 │   ├── dqn.py             # DQN self-play training (python -m omok_rl.dqn)
+│   ├── pg.py              # REINFORCE / A2C / PPO self-play training (python -m omok_rl.pg)
 │   ├── arena.py           # matches & win-rate evaluation (omok-arena CLI)
 │   ├── viz.py             # board drawing for docs figures
 │   └── ...                # more modules in later stages
@@ -143,6 +144,8 @@ omok-rl/
 │   ├── plot_stage1.py
 │   ├── stage2_dqn.py
 │   ├── plot_stage2.py
+│   ├── stage3_pg.py
+│   ├── plot_stage3.py
 │   └── ...
 ├── docs/                  # per-stage study log & experiment results (see docs/README.md)
 └── tests/
@@ -166,7 +169,7 @@ uv run omok-arena ppo heuristic --env omok9 --games 200   # colors alternate eve
 - [x] Stage 0 — Environment, Random/Heuristic agents, Arena ([docs](docs/stage0-foundations/README.md))
 - [x] Stage 1 — Tabular MC / TD / Sarsa / Q-learning (tic-tac-toe) ([docs](docs/stage1-tabular/README.md))
 - [x] Stage 2 — DQN family (6x6 → 9x9) ([docs](docs/stage2-dqn/README.md))
-- [ ] Stage 3 — REINFORCE / A2C / PPO
+- [ ] Stage 3 — REINFORCE / A2C / PPO (in progress, [docs](docs/stage3-pg/README.md))
 - [ ] Stage 4 — Minimax, MCTS
 - [ ] Stage 5 — AlphaZero (9x9 → 15x15)
 - [ ] Stage 6 — Advanced
