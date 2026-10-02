@@ -10,11 +10,15 @@ Runs share one GPU, several at a time. Summarize with scripts/plot_stage3.py.
 import argparse
 import json
 import multiprocessing as mp
+import os
 import subprocess
 from dataclasses import replace
 from pathlib import Path
 
-import torch
+# batch sizes change every update; without this, cached blocks of old sizes pile up (~5 GB of GPU memory per run)
+os.environ.setdefault('PYTORCH_CUDA_ALLOC_CONF', 'expandable_segments:True')
+
+import torch  # noqa: E402
 
 from omok_rl.pg import PGConfig, train
 
@@ -81,7 +85,7 @@ def run(experiment, name, config, out_dir, commit):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--out-dir', type=Path, default=Path('runs/stage3'))
-    parser.add_argument('--workers', type=int, default=5)  # each run holds ~2.4 GB of RAM
+    parser.add_argument('--workers', type=int, default=3)  # each run holds ~2.4 GB of RAM; 5 saturate a 16 GB GPU
     parser.add_argument('--only', help='run only this experiment (tictactoe, algorithms, updates, entropy, league)')
     args = parser.parse_args()
 

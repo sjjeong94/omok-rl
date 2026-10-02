@@ -169,7 +169,7 @@ uv run omok-arena ppo heuristic --env omok9 --games 200   # colors alternate eve
 - [x] Stage 0 — Environment, Random/Heuristic agents, Arena ([docs](docs/stage0-foundations/README.md))
 - [x] Stage 1 — Tabular MC / TD / Sarsa / Q-learning (tic-tac-toe) ([docs](docs/stage1-tabular/README.md))
 - [x] Stage 2 — DQN family (6x6 → 9x9) ([docs](docs/stage2-dqn/README.md))
-- [ ] Stage 3 — REINFORCE / A2C / PPO (in progress, [docs](docs/stage3-pg/README.md))
+- [x] Stage 3 — REINFORCE / A2C / PPO ([docs](docs/stage3-pg/README.md))
 - [ ] Stage 4 — Minimax, MCTS
 - [ ] Stage 5 — AlphaZero (9x9 → 15x15)
 - [ ] Stage 6 — Advanced

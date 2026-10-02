@@ -115,7 +115,7 @@ def tictactoe():
           '| Final entropy (nats) |')
     print('|---|---:|---:|---:|---:|---:|')
     fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
-    variants = [('a2c', 'A2C (ent_coef 0.01)', SLOTS[2])] + [
+    variants = [('a2c', 'A2C (ent_coef 0.01)', SLOTS[6])] + [
         (f'ent{e}', f'PPO, ent_coef {e}', ENT_COLORS[f'ent{e}']) for e in ('0', '0.01', '0.03', '0.1')]
     for v, label, color in variants:
         runs = groups.get(v)
@@ -154,7 +154,7 @@ def algorithms():
           '| Moves to first 0.5 vs heuristic | Gradient steps | Minutes |')
     print('|---|---:|---:|---:|---:|---:|---:|---:|---:|')
     fig, axes = plt.subplots(1, 2, figsize=(11, 3.8))
-    for v in ('dqn', *ALGO_LABELS):
+    for v in ('dqn', 'reinforce', 'reinforce-baseline', 'a2c', 'ppo'):
         runs = dqn if v == 'dqn' else groups.get(v)
         if not runs:
             continue
@@ -162,14 +162,11 @@ def algorithms():
         best = [max(c['score_vs_heuristic'] for c in r['curve']) for r in runs]
         grad = [c['updates'] * r['config'].get('epochs', 1) * r['config'].get('minibatches', 1)
                 for c, r in zip(last, runs)]
-        if v in groups or v == 'dqn':
-            print(f'| {ALGO_LABELS[v]} | {fmt([c["score_vs_random"] for c in last])} '
-                  f'| {fmt([c["score_vs_heuristic"] for c in last])} | {fmt([c["win_black_vs_heuristic"] for c in last])} '
-                  f'| {fmt([c["win_white_vs_heuristic"] for c in last])} | {fmt(best)} '
-                  f'| {fmt_steps([first_step(r, "score_vs_heuristic", 0.5) for r in runs])} '
-                  f'| {np.mean(grad):,.0f} | {fmt([r["seconds"] / 60 for r in runs], 0)} |')
-        if v == 'pool':
-            continue
+        print(f'| {ALGO_LABELS[v]} | {fmt([c["score_vs_random"] for c in last])} '
+              f'| {fmt([c["score_vs_heuristic"] for c in last])} | {fmt([c["win_black_vs_heuristic"] for c in last])} '
+              f'| {fmt([c["win_white_vs_heuristic"] for c in last])} | {fmt(best)} '
+              f'| {fmt_steps([first_step(r, "score_vs_heuristic", 0.5) for r in runs])} '
+              f'| {np.mean(grad):,.0f} | {fmt([r["seconds"] / 60 for r in runs], 0)} |')
         x, y = series(runs, 'score_vs_heuristic')
         band(axes[0], x, y, ALGO_COLORS[v], ALGO_LABELS[v], ls='--' if v == 'dqn' else '-')
         if v != 'dqn':
@@ -200,7 +197,7 @@ def algorithms():
     axes[1].set_ylabel('Moves per game')
     for ax in axes:
         steps_axis(ax)
-    axes[0].legend(loc='lower right', fontsize=9)
+    axes[0].legend(loc='upper left', fontsize=9)
     save(fig, 'diagnostics-omok9.png')
 
 
@@ -351,7 +348,7 @@ def policy_heatmap():
     moves = game.get_move_history()
     winner = {0: 'Draw', 1: 'Black (PPO) wins', 2: 'White (heuristic) wins'}[game.get_winner()]
 
-    k = max(0, len(moves) - 5)
+    k = max(0, len(moves) - 4)  # Black's second-to-last decision: the last one is often a forced block
     k -= k % 2  # a black (PPO) move
     env = make_env('omok9')
     for m in moves[:k]:
