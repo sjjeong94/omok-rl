@@ -18,7 +18,7 @@ from omok.env import BoardGame
 
 OUT = Path('runs/stage4')
 PPO = 'runs/stage3/entropy/ent0.03-seed0.pt'  # Stage 3's best policy network (PPO, ent_coef 0.03)
-DQN = 'runs/stage2/ablation/all-seed0.pt'  # Stage 2's best Q-network (Double + Dueling + 3-step)
+DQN = 'runs/stage2/omok9/all-seed0.pt'  # Stage 2's best omok9 Q-network (Double + Dueling + 3-step)
 
 # ---------------------------------------------------------------- exact solving
 

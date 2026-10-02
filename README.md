@@ -94,7 +94,7 @@ Grow the board only when needed: `3x3 (3 in a row) → 6x6 (4 in a row) → 9x9 
   4. Self-play against a pool of past checkpoints (a simple league)
 - **Experiments**: sample efficiency and stability vs DQN, effect of the entropy coefficient on exploration
 
-### Stage 4. Search — Monte Carlo Tree Search
+### Stage 4. Search — Alpha-Beta and Monte Carlo Tree Search
 - **Concepts**: Minimax/Alpha-Beta, multi-armed bandits, UCB1, UCT, rollout policies
 - **Implementation**
   1. Minimax + Alpha-Beta (ground truth on small boards)
@@ -128,7 +128,7 @@ omok-rl/
 ├── README.md
 ├── src/omok_rl/
 │   ├── envs.py            # tictactoe, omok6, omok9, freestyle15, renju15
-│   ├── agents/            # random, heuristic, minimax, tabular, dqn, policy, (mcts, alphazero)
+│   ├── agents/            # random, heuristic, minimax, tabular, dqn, policy, alphabeta, mcts, (alphazero)
 │   ├── symmetry.py        # canonical board keys under the 8 symmetries
 │   ├── nets.py            # Q-networks (CNN, MLP), policy-value network
 │   ├── replay.py          # replay buffer with two-player n-step returns
@@ -146,6 +146,8 @@ omok-rl/
 │   ├── plot_stage2.py
 │   ├── stage3_pg.py
 │   ├── plot_stage3.py
+│   ├── stage4_search.py
+│   ├── plot_stage4.py
 │   └── ...
 ├── docs/                  # per-stage study log & experiment results (see docs/README.md)
 └── tests/
@@ -170,7 +172,7 @@ uv run omok-arena ppo heuristic --env omok9 --games 200   # colors alternate eve
 - [x] Stage 1 — Tabular MC / TD / Sarsa / Q-learning (tic-tac-toe) ([docs](docs/stage1-tabular/README.md))
 - [x] Stage 2 — DQN family (6x6 → 9x9) ([docs](docs/stage2-dqn/README.md))
 - [x] Stage 3 — REINFORCE / A2C / PPO ([docs](docs/stage3-pg/README.md))
-- [ ] Stage 4 — Minimax, MCTS
+- [x] Stage 4 — Alpha-beta, MCTS ([docs](docs/stage4-search/README.md))
 - [ ] Stage 5 — AlphaZero (9x9 → 15x15)
 - [ ] Stage 6 — Advanced
 
