@@ -94,3 +94,39 @@ def test_gumbel_self_play_and_tree_reuse_self_play():
         occupied = data['obs'][:, 0] + data['obs'][:, 1]
         assert np.all(data['pi'].astype(np.float32)[occupied.reshape(n, -1) > 0] == 0)
         assert np.allclose(data['pi'].astype(np.float32).sum(1), 1, atol=1e-2)
+
+
+def test_onnx_export_matches_torch_and_plays_in_the_web_ui(tmp_path):
+    import omok
+
+    from omok_rl.alphazero import AZConfig, save_checkpoint
+    from omok_rl.nets import AlphaZeroNet
+    from omok_rl.play import OnnxEvaluator, WebAgent, export_onnx
+
+    torch.manual_seed(0)
+    net = AlphaZeroNet(4, 16, 1)
+    for p in net.parameters():  # move the BN statistics away from the defaults so they are exported for real
+        if p.dim() == 1:
+            p.data.uniform_(0.5, 1.5)
+    net.eval()
+    ckpt = tmp_path / 'az.pt'
+    save_checkpoint(ckpt, AZConfig(channels=16, blocks=1), net, 9)
+    onnx_path = export_onnx(ckpt, tmp_path / 'az.onnx', in_channels=5)  # an omok9 network for 15x15 Renju
+
+    env = play(make_env('renju15'), [112, 113, 97])
+    obs, mask = env.get_observation()[None], env.get_legal_mask()[None]
+    large = AlphaZeroNet(5, 16, 1)
+    large.load_transfer(net.state_dict())
+    large.eval()
+    obs8, mask8 = obs.repeat(8, 0), mask.repeat(8, 0)
+    for symmetries in (False, True):  # the same seed draws the same symmetry for each position
+        ref = NetEvaluator(large, 'cpu', 15, symmetries=symmetries, seed=1)(obs8, mask8)
+        got = OnnxEvaluator(onnx_path, 15, symmetries=symmetries, seed=1)(obs8, mask8)
+        assert np.allclose(got[0], ref[0], atol=1e-5) and np.allclose(got[1], ref[1], atol=1e-5)
+
+    agent = WebAgent(OnnxEvaluator(onnx_path, 15, seed=0), simulations=16)
+    game = omok.OmokGame(agent=agent, rule='renju')
+    agent.bind(game.env)
+    status = game.handle('move', {'pos': 112, 'reply': True, 'probs': True})
+    assert len(status['moves']) == 2 and abs(sum(status['probs']) - 1) < 1e-3
+    assert status['probs'][status['moves'][0]] == 0  # occupied cells get no probability

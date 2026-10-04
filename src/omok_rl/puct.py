@@ -30,7 +30,7 @@ from omok.env import PLAYER_NONE, BoardGame
 class Node:
     """A position in the tree, with the statistics of its legal moves."""
 
-    __slots__ = ('moves', 'prior', 'n', 'w', 'children', 'visits', 'value', 'gumbel', 'schedule')
+    __slots__ = ('moves', 'prior', 'n', 'w', 'children', 'visits', 'value', 'gumbel', 'schedule', 'logits')
 
     def __init__(self, moves: np.ndarray, prior: np.ndarray, value: float):
         self.moves = moves  # legal moves
@@ -41,6 +41,7 @@ class Node:
         self.visits = 0
         self.value = value  # the network's value of this position, for the player to move
         self.gumbel = self.schedule = None  # root of a Gumbel search: the Gumbel noise and the visit schedule
+        self.logits = None  # Gumbel search: log prior, computed when first needed
 
     def policy(self, size: int) -> np.ndarray:
         """Visit counts as a distribution over all `size * size` cells (the training target pi)."""
@@ -230,26 +231,28 @@ class Gumbel(PUCT):
 
     @staticmethod
     def logits(node: Node) -> np.ndarray:
-        logits = np.log(np.maximum(node.prior, 1e-30))
-        return logits - logits.max()
+        if node.logits is None:
+            logits = np.log(np.maximum(node.prior, 1e-30))
+            node.logits = logits - logits.max()
+        return node.logits
 
-    def sigma_q(self, node: Node) -> np.ndarray:
+    def sigma_q(self, node: Node, total: float | None = None) -> np.ndarray:
         """sigma(completed q) of every move, for the player to move at `node`."""
         n = node.n
-        visited = n > 0
-        q = np.divide(node.w, n, out=np.zeros_like(node.w), where=visited)
-        total = n.sum()
-        if total > 0:  # v_mix: the network's value and the prior-weighted q of the visited moves
-            p = np.maximum(node.prior[visited], 1e-30)
-            v_mix = (node.value + total * (p * q[visited]).sum() / p.sum()) / (1 + total)
-        else:
-            v_mix = node.value
-        q = np.where(visited, q, v_mix)
-        q = (q - q.min()) / max(q.max() - q.min(), 1e-8)
-        return (self.c_visit + n.max()) * self.c_scale * q
+        total = n.sum() if total is None else total
+        if total == 0:  # every move gets v_mix = the network's value: rescaled, all 0
+            return np.zeros(len(n))
+        visited = np.flatnonzero(n)
+        q_visited = node.w[visited] / n[visited]
+        p = np.maximum(node.prior[visited], 1e-30)  # v_mix: the network's value and the prior-weighted q of the visited moves
+        v_mix = (node.value + total * (p @ q_visited) / p.sum()) / (1 + total)
+        q = np.full(len(n), v_mix)
+        q[visited] = q_visited
+        lo, hi = q.min(), q.max()
+        return ((self.c_visit + n.max()) * self.c_scale / max(hi - lo, 1e-8)) * (q - lo)
 
-    def improved_policy(self, node: Node) -> np.ndarray:
-        z = self.logits(node) + self.sigma_q(node)
+    def improved_policy(self, node: Node, total: float | None = None) -> np.ndarray:
+        z = self.logits(node) + self.sigma_q(node, total)
         z = np.exp(z - z.max())
         return z / z.sum()
 
@@ -263,10 +266,11 @@ class Gumbel(PUCT):
             k = int(node.n.sum())
             visit = node.schedule[k] if k < len(node.schedule) else node.n.max()
             return int(np.argmax(self.root_scores(node, visit)))
-        return int(np.argmax(self.improved_policy(node) - node.n / (1 + node.n.sum())))
+        total = node.n.sum()
+        return int(np.argmax(self.improved_policy(node, total) - node.n / (1 + total)))
 
     def make_root(self, moves, prior, value, noise, simulations):
-        root = Node(moves, prior, value)
+        root = Node(moves, prior, value)  # (the prior is the network's: no Dirichlet noise)
         root.gumbel = self.rng.gumbel(size=len(moves)) if noise else np.zeros(len(moves))
         root.schedule = halving_schedule(min(self.considered, len(moves)), simulations)
         return root

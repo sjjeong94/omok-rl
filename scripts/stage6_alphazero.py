@@ -16,6 +16,7 @@ from pathlib import Path
 from stage5_alphazero import git_commit
 
 OUT = Path('runs/stage6')
+STAGE5_OMOK9 = 'runs/stage5/omok9/main-seed0.pt'  # Stage 5's final omok9 network (0.76 vs heuristic)
 OMOK9_RUNS = {  # one change each from Stage 5's main run, 30 generations
     'gumbel16': dict(search='gumbel', simulations=16),
     'gumbel50': dict(search='gumbel', simulations=50),
@@ -29,7 +30,14 @@ def experiments():
     from omok_rl.alphazero import AZConfig
 
     omok9 = AZConfig(env='omok9', generations=30)
-    return [('omok9', f'{name}-seed0', replace(omok9, **overrides)) for name, overrides in OMOK9_RUNS.items()]
+    runs = [('omok9', f'{name}-seed0', replace(omok9, **overrides)) for name, overrides in OMOK9_RUNS.items()]
+    # cheap searches: as many generations as the 30-generation PUCT run's wall-clock time allows
+    runs.append(('omok9', 'gumbel16-long-seed0', replace(omok9, search='gumbel', simulations=16, generations=200)))
+    # 15x15 with Gumbel search: from scratch, and starting from Stage 5's omok9 network (as Stage 5's transfer run)
+    freestyle = AZConfig(env='freestyle15', search='gumbel', simulations=50, generations=60)
+    runs.append(('freestyle15', 'gumbel50-scratch-seed0', freestyle))
+    runs.append(('freestyle15', 'gumbel50-transfer-seed0', replace(freestyle, init=STAGE5_OMOK9)))
+    return runs
 
 
 def main():
