@@ -12,7 +12,7 @@ from omok_rl.agents import make_agent
 from omok_rl.agents.alphazero import AlphaZeroAgent
 from omok_rl.arena import Game, random_opening
 from omok_rl.envs import make_env
-from omok_rl.puct import PUCT, choose_move, drive
+from omok_rl.puct import PUCT, drive, make_search
 
 
 def match_openings(env_name: str, n_games: int, plies: int, seed: int | None) -> list[list[int]]:
@@ -59,26 +59,42 @@ def play_match(agent_a, agent_b, env_name: str, openings: list[list[int]], first
 
 
 def self_play(search: PUCT, env_name: str, n_games: int, simulations: int, temp_moves: int, rng: np.random.Generator,
-              leaves: int = 1) -> dict:
-    """Play `n_games` self-play games at once, with Dirichlet noise at every root and the first `temp_moves` moves of
-    each game drawn in proportion to the visits. Returns the training samples and per-game statistics."""
-    return drive(self_play_steps(search, env_name, n_games, simulations, temp_moves, rng, leaves), search.evaluator)
+              leaves: int = 1, fast_simulations: int = 0, full_prob: float = 1.0, reuse_tree: bool = False) -> dict:
+    """Play `n_games` self-play games at once. Returns the training samples and per-game statistics.
+
+    Every move is chosen by a search with root noise (Dirichlet for PUCT, Gumbel for `puct.Gumbel`); the first
+    `temp_moves` moves of a PUCT game are drawn in proportion to the visits.
+    With `fast_simulations` > 0 (**playout cap randomization**, KataGo), only a share `full_prob` of the moves get the
+    full search of `simulations`, with noise, and become training samples; the others get a cheap search of
+    `fast_simulations` without noise, which only serves to play the game on. With `reuse_tree`, the subtree of the
+    move played is kept as the next root (PUCT only)."""
+    return drive(self_play_steps(search, env_name, n_games, simulations, temp_moves, rng, leaves, fast_simulations,
+                                 full_prob, reuse_tree), search.evaluator)
 
 
 def self_play_steps(search: PUCT, env_name: str, n_games: int, simulations: int, temp_moves: int,
-                    rng: np.random.Generator, leaves: int = 1):
+                    rng: np.random.Generator, leaves: int = 1, fast_simulations: int = 0, full_prob: float = 1.0,
+                    reuse_tree: bool = False):
     """`self_play` as a generator of network requests (see `PUCT.search_steps`)."""
     envs = [make_env(env_name) for _ in range(n_games)]
     size = envs[0].size
     records = [[] for _ in envs]  # (obs, pi, player) per position
-    obs, pis, zs, lengths, winners = [], [], [], [], []
+    kept = [None] * n_games  # subtrees for tree reuse
+    obs, pis, zs, lengths, winners, full_moves = [], [], [], [], [], 0
     active = list(range(n_games))
     while active:
-        roots = yield from search.search_steps([envs[g] for g in active], simulations, noise=True, leaves=leaves)
-        for g, root in zip(active, roots):
+        full = [fast_simulations <= 0 or rng.random() < full_prob for _ in active]
+        sims = [simulations if f else fast_simulations for f in full]
+        roots = yield from search.search_steps([envs[g] for g in active], sims, noise=full, leaves=leaves,
+                                               roots=[kept[g] for g in active] if reuse_tree else None)
+        for g, root, f in zip(active, roots, full):
             env = envs[g]
-            records[g].append((env.get_observation().astype(np.uint8), root.policy(size), env.get_player()))
-            env.move(choose_move(root, rng, sample=len(env.get_move_history()) < temp_moves))
+            if f:
+                records[g].append((env.get_observation().astype(np.uint8), search.target(root, size), env.get_player()))
+                full_moves += 1
+            move = search.choose(root, rng, sample=len(env.get_move_history()) < temp_moves)
+            kept[g] = root.children[int(np.flatnonzero(root.moves == move)[0])] if reuse_tree else None
+            env.move(move)
             if env.is_done():
                 winner = env.get_winner()
                 for o, pi, player in records[g]:
@@ -87,10 +103,13 @@ def self_play_steps(search: PUCT, env_name: str, n_games: int, simulations: int,
                     zs.append(0 if winner == PLAYER_NONE else 1 if winner == player else -1)
                 lengths.append(len(env.get_move_history()))
                 winners.append(winner)
-                records[g] = None
+                records[g] = kept[g] = None
         active = [g for g in active if not envs[g].is_done()]
-    return dict(obs=np.stack(obs), pi=np.stack(pis).astype(np.float16), z=np.array(zs, np.int8),
-                lengths=np.array(lengths), winners=np.array(winners))
+    planes = envs[0].get_observation().shape
+    return dict(obs=np.stack(obs) if obs else np.zeros((0, *planes), np.uint8),
+                pi=np.stack(pis).astype(np.float16) if pis else np.zeros((0, size * size), np.float16),
+                z=np.array(zs, np.int8), lengths=np.array(lengths), winners=np.array(winners),
+                full_moves=np.array([full_moves]))
 
 
 # ---------------------------------------------------------------------------- worker processes
@@ -101,7 +120,13 @@ def make_player(spec: dict | str, seed: int):
     if isinstance(spec, str):
         return make_agent(spec, seed=seed)
     return AlphaZeroAgent(evaluator=inference.evaluator(spec['net']), simulations=spec['simulations'],
-                          c_puct=spec['c_puct'], seed=seed, name=spec.get('name', spec['net']))
+                          c_puct=spec['c_puct'], seed=seed, name=spec.get('name', spec['net']),
+                          search=spec.get('search', 'puct'), considered=spec.get('considered', 16))
+
+
+def search_from_config(config: dict, evaluator=None, seed: int | None = None) -> PUCT:
+    keys = ('c_puct', 'dirichlet_alpha', 'dirichlet_eps', 'considered', 'c_visit', 'c_scale')
+    return make_search(config.get('search', 'puct'), evaluator, seed=seed, **{k: config[k] for k in keys if k in config})
 
 
 def self_play_task(net_id: str, config: dict, n_games: int, seed: int) -> dict:
@@ -109,8 +134,9 @@ def self_play_task(net_id: str, config: dict, n_games: int, seed: int) -> dict:
     turns: one group's leaves are on the GPU while the other group is searched."""
     groups = [len(g) for g in np.array_split(np.arange(n_games), inference.SLOTS) if len(g)]
     rng = np.random.default_rng(seed)
-    steps = [self_play_steps(PUCT(None, config['c_puct'], config['dirichlet_alpha'], config['dirichlet_eps'], seed + k),
-                             config['env'], n, config['simulations'], config['temp_moves'], rng, config['leaves'])
+    steps = [self_play_steps(search_from_config(config, seed=seed + k), config['env'], n, config['simulations'],
+                             config['temp_moves'], rng, config['leaves'], config.get('fast_simulations', 0),
+                             config.get('full_prob', 1.0), config.get('reuse_tree', False))
              for k, n in enumerate(groups)]
     results = inference.drive_interleaved(steps, net_id)
     return {k: np.concatenate([r[k] for r in results]) for k in results[0]}

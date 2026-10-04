@@ -4,11 +4,13 @@ import numpy as np
 from omok.env import BoardGame
 
 from omok_rl.agents.base import Agent
-from omok_rl.puct import PUCT, choose_move
+from omok_rl.puct import make_search
 
 
 class AlphaZeroAgent(Agent):
     """Plays the most visited move of a PUCT search guided by an AlphaZero network (no noise, no sampling).
+
+    With `search='gumbel'`, plays the move chosen by a Gumbel search without noise (`puct.Gumbel`) instead.
 
     `simulations=0` plays the network's most likely move without searching (the "raw policy").
     `act` searches one game; `act_batch` searches many games at once, which is how the training loop and
@@ -16,7 +18,8 @@ class AlphaZeroAgent(Agent):
     """
 
     def __init__(self, net=None, size: int | None = None, simulations: int = 200, c_puct: float = 1.5, leaves: int = 1,
-                 device='cpu', symmetries: bool = True, seed: int | None = None, name: str = 'alphazero', evaluator=None):
+                 device='cpu', symmetries: bool = True, seed: int | None = None, name: str = 'alphazero', evaluator=None,
+                 search: str = 'puct', considered: int = 16):
         """Evaluates positions with `net` (an `AlphaZeroNet`) on `device`, or with any `evaluator`
         (e.g. `inference.RemoteEvaluator` in a worker process, which keeps this module free of torch)."""
         self.simulations, self.leaves, self.name = simulations, leaves, name
@@ -26,13 +29,13 @@ class AlphaZeroAgent(Agent):
 
             evaluator = NetEvaluator(net, device, size, symmetries, seed)
         self.evaluator = evaluator
-        self.search = PUCT(self.evaluator, c_puct, seed=seed)
+        self.search = make_search(search, self.evaluator, c_puct, considered=considered, seed=seed)
 
     def act_batch(self, envs: list[BoardGame]) -> list[int]:
         roots = self.search.search(envs, self.simulations, leaves=self.leaves)
         if self.simulations == 0:  # the root's prior is the network's policy
             return [int(r.moves[self.rng.choice(np.flatnonzero(r.prior == r.prior.max()))]) for r in roots]
-        return [choose_move(root, self.rng) for root in roots]
+        return [self.search.choose(root, self.rng) for root in roots]
 
     def act(self, env: BoardGame) -> int:
         return self.act_batch([env])[0]
@@ -51,5 +54,6 @@ class AlphaZeroAgent(Agent):
         net.load_state_dict(ckpt['state_dict'])
         net.to(device).eval()
         size = kwargs.pop('size', ckpt['size'])  # the network plays on any board size
-        kwargs = dict(simulations=c['eval_simulations'], c_puct=c['c_puct'], name=Path(path).stem) | kwargs
+        kwargs = dict(simulations=c['eval_simulations'], c_puct=c['c_puct'], search=c.get('search', 'puct'),
+                      considered=c.get('considered', 16), name=Path(path).stem) | kwargs
         return cls(net, size, device=device, **kwargs)

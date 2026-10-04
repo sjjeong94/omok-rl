@@ -51,8 +51,15 @@ class AZConfig:
     channels: int = 64
     blocks: int = 6
     # search
+    search: str = 'puct'  # 'puct' (AlphaZero) or 'gumbel' (Gumbel AlphaZero, `puct.Gumbel`)
     simulations: int = 200
     c_puct: float = 1.5
+    considered: int = 16  # Gumbel: root moves sampled for Sequential Halving
+    c_visit: float = 50.0  # Gumbel: sigma(q) = (c_visit + max N) * c_scale * q
+    c_scale: float = 0.1
+    fast_simulations: int = 0  # playout cap randomization (KataGo) when > 0: the cheap search of most moves
+    full_prob: float = 0.25  # ... and the share of moves that get the full search and become training samples
+    reuse_tree: bool = False  # keep the subtree of the move played as the next root (PUCT only)
     dirichlet_alpha: float = 10.0  # total concentration, split over the legal moves: alpha = 10 / legal moves
     dirichlet_eps: float = 0.25
     temp_moves: int = 4  # moves sampled in proportion to the visits at the start of each game
@@ -127,7 +134,7 @@ class Workers:
 def player(net_id: str, config: AZConfig, simulations: int | None = None) -> dict:
     """Spec of an AlphaZero player for `Workers.match`."""
     return dict(net=net_id, simulations=config.eval_simulations if simulations is None else simulations,
-                c_puct=config.c_puct)
+                c_puct=config.c_puct, search=config.search, considered=config.considered)
 
 
 # ---------------------------------------------------------------------------- learning
@@ -251,6 +258,7 @@ def train(config: AZConfig, out: Path, device: str | None = None, log=print) -> 
             new = sum(len(r['z']) for r in results)
             lengths = np.concatenate([r['lengths'] for r in results])
             winners = np.concatenate([r['winners'] for r in results])
+            full_moves = sum(int(r['full_moves'].sum()) for r in results)
             games += len(lengths)
             positions += new
             self_play_seconds = time.perf_counter() - start
@@ -259,7 +267,7 @@ def train(config: AZConfig, out: Path, device: str | None = None, log=print) -> 
             stats = learn(net, optimizer, buffer, config, steps, device, perms)
             point = {'gen': gen, 'games': games, 'positions': positions, 'buffer': buffer.size, 'steps': steps,
                      'game_length': float(lengths.mean()), 'black_wins': float(np.mean(winners == PLAYER_BLACK)),
-                     'draws': float(np.mean(winners == PLAYER_NONE))} | stats
+                     'draws': float(np.mean(winners == PLAYER_NONE)), 'full_moves': full_moves} | stats
             point['self_play_seconds'] = self_play_seconds
             point['train_seconds'] = time.perf_counter() - start - self_play_seconds
 
