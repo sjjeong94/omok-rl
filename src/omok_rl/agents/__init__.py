@@ -9,7 +9,7 @@ from omok_rl.agents.random_agent import RandomAgent
 from omok_rl.agents.tabular import AfterstateAgent, QAgent, TabularAgent
 
 AGENTS = ('random', 'heuristic', 'minimax', 'alphabeta[:depth]', 'mcts[:simulations]', 'mcts-heuristic[:simulations]',
-          'pretrained0', 'pretrained1', '<saved tabular agent .pkl>', '<saved DQN or policy .pt>')
+          'pretrained0', 'pretrained1', '<saved tabular agent .pkl>', '<saved DQN, policy or AlphaZero .pt>')
 
 
 def make_agent(name: str, seed: int | None = None) -> Agent:
@@ -33,8 +33,13 @@ def make_agent(name: str, seed: int | None = None) -> Agent:
         from omok_rl.agents.dqn import DQNAgent
         from omok_rl.agents.policy import PolicyAgent
 
-        if torch.load(name, map_location='cpu', weights_only=False).get('kind') == 'policy':
+        kind = torch.load(name, map_location='cpu', weights_only=False).get('kind')
+        if kind == 'policy':
             return PolicyAgent.load(name, seed=seed)
+        if kind == 'alphazero':
+            from omok_rl.agents.alphazero import AlphaZeroAgent
+
+            return AlphaZeroAgent.load(name, seed=seed)
         return DQNAgent.load(name)
     if name.endswith('.pkl'):
         agent = TabularAgent.load(name)
