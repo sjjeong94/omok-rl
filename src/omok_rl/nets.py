@@ -160,7 +160,7 @@ class NetEvaluator:
     With `symmetries`, each position is shown to the network through one of the 8 rotations/reflections, drawn at
     random (as in AlphaGo Zero), and the policy is mapped back. Returns legal-move probabilities and values.
 
-    On a GPU, small batches cost about as much as large ones: the time goes into launching the ~40 kernels of one
+    On a GPU, small batches cost about as much as large ones: the time goes into launching the ~60 small kernels of one
     forward pass, not into computing. So the whole evaluation is recorded once per batch size as a **CUDA graph**
     and replayed with one launch; batches are padded up to the next power of two to reuse a few graphs.
     The graphs read the network's weights in place, so they stay valid while the network trains.

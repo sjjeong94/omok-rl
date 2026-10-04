@@ -218,7 +218,7 @@ Raw logs, checkpoints, and TensorBoard runs are **not** committed to `docs/`. On
 | 2 | [Value-Based Deep RL — DQN](stage2-dqn/README.md) | Done |
 | 3 | [Policy Gradients — REINFORCE → A2C → PPO](stage3-pg/README.md) | Done |
 | 4 | [Search — Alpha-Beta and MCTS](stage4-search/README.md) | Done |
-| 5 | AlphaZero | Not started |
+| 5 | [AlphaZero — Combining Search and Learning](stage5-alphazero/README.md) | Done (15x15 left open) |
 | 6 | Advanced | Not started |
 
 Replace each entry with a link (e.g. [`stage0-foundations`](stage0-foundations/README.md)) once the document exists.

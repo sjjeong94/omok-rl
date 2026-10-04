@@ -128,12 +128,16 @@ omok-rl/
 ├── README.md
 ├── src/omok_rl/
 │   ├── envs.py            # tictactoe, omok6, omok9, freestyle15, renju15
-│   ├── agents/            # random, heuristic, minimax, tabular, dqn, policy, alphabeta, mcts, (alphazero)
+│   ├── agents/            # random, heuristic, minimax, tabular, dqn, policy, alphabeta, mcts, alphazero
 │   ├── symmetry.py        # canonical board keys under the 8 symmetries
-│   ├── nets.py            # Q-networks (CNN, MLP), policy-value network
+│   ├── nets.py            # Q-networks (CNN, MLP), policy-value networks, batched NetEvaluator
 │   ├── replay.py          # replay buffer with two-player n-step returns
 │   ├── dqn.py             # DQN self-play training (python -m omok_rl.dqn)
 │   ├── pg.py              # REINFORCE / A2C / PPO self-play training (python -m omok_rl.pg)
+│   ├── puct.py            # batched PUCT search (numpy only)
+│   ├── inference.py       # GPU inference server for CPU search workers
+│   ├── selfplay.py        # self-play games and batched matches
+│   ├── alphazero.py       # AlphaZero training loop (python -m omok_rl.alphazero)
 │   ├── arena.py           # matches & win-rate evaluation (omok-arena CLI)
 │   ├── viz.py             # board drawing for docs figures
 │   └── ...                # more modules in later stages
@@ -148,6 +152,9 @@ omok-rl/
 │   ├── plot_stage3.py
 │   ├── stage4_search.py
 │   ├── plot_stage4.py
+│   ├── stage5_alphazero.py
+│   ├── stage5_eval.py
+│   ├── plot_stage5.py
 │   └── ...
 ├── docs/                  # per-stage study log & experiment results (see docs/README.md)
 └── tests/
@@ -173,7 +180,7 @@ uv run omok-arena ppo heuristic --env omok9 --games 200   # colors alternate eve
 - [x] Stage 2 — DQN family (6x6 → 9x9) ([docs](docs/stage2-dqn/README.md))
 - [x] Stage 3 — REINFORCE / A2C / PPO ([docs](docs/stage3-pg/README.md))
 - [x] Stage 4 — Alpha-beta, MCTS ([docs](docs/stage4-search/README.md))
-- [ ] Stage 5 — AlphaZero (9x9 → 15x15)
+- [x] Stage 5 — AlphaZero: 9x9 done, 15x15 left open ([docs](docs/stage5-alphazero/README.md))
 - [ ] Stage 6 — Advanced
 
 ## 7. References

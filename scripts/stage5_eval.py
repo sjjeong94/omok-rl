@@ -23,15 +23,16 @@ OUT = Path('runs/stage5/eval')
 RUNS = Path('runs/stage5')
 
 
-def load_net(path, device='cuda'):
+def load_net(path, device='cuda', in_channels: int | None = None):
+    """A saved network; with `in_channels`, for a board with more input planes (the extra planes get zero weights)."""
     import torch
 
     from omok_rl.nets import AlphaZeroNet
 
     ckpt = torch.load(path, map_location='cpu', weights_only=False)
     c = ckpt['config']
-    net = AlphaZeroNet(ckpt['in_channels'], c['channels'], c['blocks'])
-    net.load_state_dict(ckpt['state_dict'])
+    net = AlphaZeroNet(in_channels or ckpt['in_channels'], c['channels'], c['blocks'])
+    net.load_transfer(ckpt['state_dict'])
     return net.to(device).eval(), ckpt
 
 
@@ -76,16 +77,21 @@ GAMES, OPENINGS = 100, 4  # as in Stages 2-4: 50 random 4-move openings, each pl
 class Players:
     """AlphaZero checkpoints registered with the inference server, by name; other players are agent names."""
 
-    def __init__(self, workers, size: int | None = None):
-        self.workers, self.size, self.c_puct = workers, size, {}
+    def __init__(self, workers, env_name: str | None = None):
+        from omok_rl.envs import make_env
+
+        env = make_env(env_name) if env_name else None
+        self.size = env.size if env else None  # networks play on this board, whatever size they were trained on
+        self.in_channels = env.get_observation().shape[0] if env else None
+        self.workers, self.c_puct = workers, {}
 
     def az(self, path: str, simulations: int, name: str | None = None) -> dict:
-        """A player spec; `size` (if given) overrides the board size the network was trained on."""
+        """A player spec for `Workers.matches`."""
         from omok_rl.nets import NetEvaluator
 
         net_id = str(path)
         if net_id not in self.c_puct:
-            net, ckpt = load_net(path)
+            net, ckpt = load_net(path, in_channels=self.in_channels)
             self.workers.evaluators[net_id] = NetEvaluator(net, 'cuda', self.size or ckpt['size'], seed=0)
             self.c_puct[net_id] = ckpt['config']['c_puct']
         return dict(net=net_id, simulations=simulations, c_puct=self.c_puct[net_id],
@@ -154,11 +160,12 @@ def elo(run: str = 'omok9/main-seed0', simulations: int = 200, games: int = 40, 
 
 
 def versus(env_name: str, pairings: list[tuple]) -> dict:
-    """Matches (a, b) where a and b are (checkpoint path, simulations) or agent names; 100 games each."""
+    """Matches (a, b) where a and b are (checkpoint path, simulations) or agent names; 100 games each.
+    Networks play on `env_name`'s board, also if they were trained on another size."""
     from omok_rl.alphazero import Workers
 
     workers = Workers(12)
-    players = Players(workers)
+    players = Players(workers, env_name)
     spec = lambda p: players.az(*p) if isinstance(p, tuple) else p
     label = lambda p: f'{Path(p[0]).parent.name}/{Path(p[0]).stem}-{p[1]}' if isinstance(p, tuple) else Path(p).stem
     start = time.perf_counter()
@@ -182,8 +189,19 @@ def jobs():
     out.append(('omok9-simulations', versus, ('omok9', [((MAIN9, n), 'alphabeta:5')
                                                         for n in (0, 25, 50, 100, 200, 400, 800, 1600)])))
     ablations = [f'{a}-seed0' for a in OMOK9_ABLATIONS]
-    out.append(('omok9-ablations', versus, ('omok9', [((f'runs/stage5/omok9/{a}.pt', 200), (MAIN9, 200))
+    main30 = 'runs/stage5/omok9/main-seed0/gen-0030.pt'  # the ablations ran 30 generations
+    out.append(('omok9-ablations', versus, ('omok9', [((f'runs/stage5/omok9/{a}.pt', 200), (main30, 200))
                                                       for a in ablations])))
+    # 15x15: the omok9 network before any 15x15 training, then the trained networks against the pretrained models
+    out.append(('freestyle15-zero-shot', versus, ('freestyle15', [((MAIN9, 0), 'heuristic'), ((MAIN9, 200), 'heuristic')])))
+    free = {name: f'runs/stage5/freestyle15/{name}-seed0.pt' for name in ('scratch', 'transfer')}
+    out.append(('freestyle15-final', versus, ('freestyle15', [
+        ((free['transfer'], 200), (free['scratch'], 200)),
+        *[((path, sims), opponent) for path in free.values() for sims in (0, 200)
+          for opponent in ('heuristic', 'pretrained0', 'pretrained1')]])))
+    renju = 'runs/stage5/renju15/transfer-seed0.pt'
+    out.append(('renju15-final', versus, ('renju15', [((renju, sims), opponent) for sims in (0, 200, 800)
+                                                      for opponent in ('heuristic', 'pretrained0', 'pretrained1')])))
     return out
 
 

@@ -19,6 +19,7 @@ OMOK9_ABLATIONS = {
     'temp8': dict(temp_moves=8),  # sample twice as many opening moves
     'reuse4': dict(reuse=4.0),  # fewer gradient steps per self-play position
     'sims50': dict(simulations=50),  # a quarter of the search per self-play move
+    'sims100': dict(simulations=100),  # half of it
     'no-symmetry': dict(augment=False, symmetries=False),  # no 8x augmentation, in training or in the search
     'gating': dict(gating=True),  # AlphaGo Zero: self-play with the best network so far
 }
@@ -36,6 +37,13 @@ def experiments():
     ablation = replace(omok9, generations=30)
     for name, overrides in OMOK9_ABLATIONS.items():
         runs.append(('omok9', f'{name}-seed0', replace(ablation, **overrides)))
+    # 15x15: from scratch, or starting from the omok9 network (the fully convolutional network plays on any size);
+    # Renju starts from the freestyle network (its extra input plane, forbidden points, starts with zero weights)
+    freestyle = AZConfig(env='freestyle15', generations=30)
+    runs.append(('freestyle15', 'scratch-seed0', freestyle))
+    runs.append(('freestyle15', 'transfer-seed0', replace(freestyle, init=str(OUT / 'omok9' / 'main-seed0.pt'))))
+    runs.append(('renju15', 'transfer-seed0', replace(freestyle, env='renju15',
+                                                      init=str(OUT / 'freestyle15' / 'transfer-seed0.pt'))))
     return runs
 
 
@@ -46,7 +54,7 @@ def git_commit() -> str:
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--only', help='run only this experiment (tictactoe, omok9, ...)')
+    parser.add_argument('--only', help='run only this experiment (tictactoe, omok9, freestyle15, renju15)')
     parser.add_argument('--run', help='run only runs with this name')
     args = parser.parse_args()
 
