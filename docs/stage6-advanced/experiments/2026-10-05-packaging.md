@@ -1,7 +1,7 @@
 # Shipping the Stage 6 networks in the `omok` package
 
 > **TL;DR** — The Renju and freestyle networks of Stage 6 are now in the `omok` package as `omok.AlphaZeroAgent`, with the same interface as
-> `omok.OmokAgent` (`agent(state, player)`, `agent.get_probs(state, player)`), so they also play in the web UI (`python -m omok --agent alphazero`).
+> `omok.OmokAgent` (`agent(state, player)`, `agent.get_probs(state, player)`), and they are now the web UI's default AI (`python -m omok`).
 > The networks don't need the "last move" input plane (no loss of strength), which is what makes the old interface enough.
 > Through the package, they beat the package's previous best model, `b.onnx`: 0.70 / 0.83 with the network alone and 0.84 / 0.92 with
 > a 200-simulation search (Renju / freestyle, 100 games each), in line with the results in omok-rl. A search of 200 simulations takes 1 s per move on the CPU.
@@ -63,7 +63,7 @@ In the `omok` package (`../omok`, not yet released):
 |---|---|
 | `omok/alphazero.py` | `AlphaZeroAgent(rule, simulations=0, ...)`: builds the planes from `(state, player)` (`env_from_state`), evaluates with onnxruntime through a random board symmetry, and optionally runs a PUCT search (a numpy-only copy of `omok_rl.puct.PUCT`, 8 leaves per network call with virtual loss). `get_probs` averages the network over the 8 symmetries, or returns the search's visit shares; the search is cached per position, so the move and the overlay share one search |
 | `omok/agent.py` | `check_model(name)`: download any model file by name (`check_models(index)` now uses it) |
-| `omok/__main__.py` | `python -m omok --agent alphazero [--simulations N]`; the default agent is unchanged |
+| `omok/__main__.py` | `python -m omok` now plays `AlphaZeroAgent` with 200 simulations (`--simulations N`); `--agent policy` gives the previous `OmokAgent` |
 | `test/test_alphazero.py` | Rebuilt env matches the real one (players, legal moves, forbidden points), the network ignores the last move, probabilities (legal, sum to 1, symmetric), search wins and blocks, legal games under both rules, a move through the web UI |
 | `README.md` | Usage and results |
 
@@ -89,4 +89,5 @@ filled with the board's stones (any order) to get the length right. Its contents
 
 - **Release** (step 4 of the plan): upload the two model files to `models/` in the `omok` repository (the agent downloads them from there; until then,
   pass `model_path=`), bump the version, publish, and pin the new version here.
-- The web UI's default agent is still `OmokAgent` (b.onnx); making `AlphaZeroAgent` the default is a one-line change in `omok/__main__.py`.
+- The web UI's default agent is now `AlphaZeroAgent`, which needs the model files on GitHub: until the release, `python -m omok` fails to download
+  them unless they are copied into `./omok_assets/` by hand (or `--agent policy` is used).
