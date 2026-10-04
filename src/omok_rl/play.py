@@ -20,11 +20,14 @@ from omok_rl.puct import make_search
 from omok_rl.symmetry import permutations
 
 
-def export_onnx(checkpoint: str | Path, out: str | Path, in_channels: int | None = None) -> Path:
+def export_onnx(checkpoint: str | Path, out: str | Path, in_channels: int | None = None, ignore_last_move: bool = False,
+                metadata: dict | None = None) -> Path:
     """Export an AlphaZero checkpoint to ONNX: input `obs` (batch, planes, size, size), outputs `logits` and `value`.
 
     Batch and board size are dynamic (the network is fully convolutional). `in_channels` loads the network for a board
-    with more input planes (e.g. an omok9 network on 15x15 Renju; the extra planes get zero weights)."""
+    with more input planes (e.g. an omok9 network on 15x15 Renju; the extra planes get zero weights). With
+    `ignore_last_move`, the graph sets input plane 3 (the last move) to zero, so the network plays from the board alone,
+    which is all `omok.OmokAgent`'s interface `agent(state, player)` provides. `metadata` is stored in the file."""
     import torch
 
     from omok_rl.nets import AlphaZeroNet
@@ -34,11 +37,30 @@ def export_onnx(checkpoint: str | Path, out: str | Path, in_channels: int | None
     net = AlphaZeroNet(in_channels or ckpt['in_channels'], c['channels'], c['blocks'])
     net.load_transfer(ckpt['state_dict'])
     net.eval()
+    model = net
+    if ignore_last_move:
+        class BoardOnly(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.net = net
+                self.register_buffer('keep', torch.ones(1, net.in_channels, 1, 1).index_fill_(1, torch.tensor([3]), 0))
+
+            def forward(self, obs):
+                return self.net(obs * self.keep)
+
+        model = BoardOnly().eval()
     x = torch.zeros(1, net.in_channels, ckpt['size'], ckpt['size'])
     out = Path(out)
-    torch.onnx.export(net, (x,), out, input_names=['obs'], output_names=['logits', 'value'], dynamo=False,
+    torch.onnx.export(model, (x,), out, input_names=['obs'], output_names=['logits', 'value'], dynamo=False,
                       dynamic_axes={'obs': {0: 'batch', 2: 'size', 3: 'size'}, 'logits': {0: 'batch', 1: 'cells'},
                                     'value': {0: 'batch'}})
+    if metadata:
+        import onnx
+
+        proto = onnx.load(out)
+        for k, v in metadata.items():
+            proto.metadata_props.add(key=str(k), value=str(v))
+        onnx.save(proto, out)
     return out
 
 

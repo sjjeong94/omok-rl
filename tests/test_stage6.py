@@ -130,3 +130,26 @@ def test_onnx_export_matches_torch_and_plays_in_the_web_ui(tmp_path):
     status = game.handle('move', {'pos': 112, 'reply': True, 'probs': True})
     assert len(status['moves']) == 2 and abs(sum(status['probs']) - 1) < 1e-3
     assert status['probs'][status['moves'][0]] == 0  # occupied cells get no probability
+
+
+def test_onnx_export_without_the_last_move(tmp_path):
+    import onnx
+
+    from omok_rl.alphazero import AZConfig, save_checkpoint
+    from omok_rl.nets import AlphaZeroNet
+    from omok_rl.play import OnnxEvaluator, export_onnx
+
+    torch.manual_seed(0)
+    net = AlphaZeroNet(5, 16, 1).eval()
+    ckpt = tmp_path / 'az.pt'
+    save_checkpoint(ckpt, AZConfig(channels=16, blocks=1), net, 15)
+    path = export_onnx(ckpt, tmp_path / 'az.onnx', ignore_last_move=True, metadata={'rule': 'renju'})
+    assert {p.key: p.value for p in onnx.load(path).metadata_props} == {'rule': 'renju'}
+
+    env = play(make_env('renju15'), [112, 113, 97])
+    obs, mask = env.get_observation()[None], env.get_legal_mask()[None]
+    zeroed = obs.copy()
+    zeroed[:, 3] = 0
+    got = OnnxEvaluator(path, 15, symmetries=False)(obs, mask)
+    ref = NetEvaluator(net, 'cpu', 15, symmetries=False)(zeroed, mask)
+    assert obs[0, 3].sum() == 1 and np.allclose(got[0], ref[0], atol=1e-5) and np.allclose(got[1], ref[1], atol=1e-5)

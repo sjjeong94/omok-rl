@@ -376,6 +376,11 @@ Renju network beats the freestyle network it started from 0.57.
 - **MuZero** (a learned model instead of the rules) was listed for this stage and not attempted: with exact, cheap rules, a learned model has nothing to add
   here except as an exercise.
 
+## Follow-up
+
+- [Shipping the Stage 6 networks in the `omok` package](experiments/2026-10-05-packaging.md): `omok.AlphaZeroAgent`, checks that the networks don't need
+  the last-move plane, and parity of the package's agent with omok-rl's (0.84–0.92 against b.onnx with 200 simulations).
+
 ## References
 
 - Danihelka, Guez, Schrittwieser & Silver, *Policy improvement by planning with Gumbel*, ICLR 2022 (Gumbel AlphaZero / MuZero)
