@@ -15,6 +15,13 @@ from dataclasses import replace
 from pathlib import Path
 
 OUT = Path('runs/stage5')
+OMOK9_ABLATIONS = {
+    'temp8': dict(temp_moves=8),  # sample twice as many opening moves
+    'reuse4': dict(reuse=4.0),  # fewer gradient steps per self-play position
+    'sims50': dict(simulations=50),  # a quarter of the search per self-play move
+    'no-symmetry': dict(augment=False, symmetries=False),  # no 8x augmentation, in training or in the search
+    'gating': dict(gating=True),  # AlphaGo Zero: self-play with the best network so far
+}
 
 
 def experiments():
@@ -23,11 +30,12 @@ def experiments():
     omok9 = AZConfig(env='omok9')
     runs = [('tictactoe', 'main-seed0', AZConfig(env='tictactoe', channels=32, blocks=2, simulations=50, temp_moves=4,
                                                   games_per_gen=240, generations=20, eval_every=2, eval_openings=0,
-                                                  eval_simulations=50, buffer_size=20_000))]
+                                                  eval_simulations=50, buffer_size=20_000, reuse=4))]
     runs.append(('omok9', 'main-seed0', omok9))
-    runs.append(('omok9', 'sims50-seed0', replace(omok9, simulations=50)))
-    runs.append(('omok9', 'no-symmetry-seed0', replace(omok9, augment=False, symmetries=False)))
-    runs.append(('omok9', 'gating-seed0', replace(omok9, gating=True)))
+    # ablations: one change each, 30 generations (compared with the first 30 of the main run)
+    ablation = replace(omok9, generations=30)
+    for name, overrides in OMOK9_ABLATIONS.items():
+        runs.append(('omok9', f'{name}-seed0', replace(ablation, **overrides)))
     return runs
 
 

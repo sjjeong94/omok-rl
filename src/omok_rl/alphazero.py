@@ -55,16 +55,16 @@ class AZConfig:
     c_puct: float = 1.5
     dirichlet_alpha: float = 10.0  # total concentration, split over the legal moves: alpha = 10 / legal moves
     dirichlet_eps: float = 0.25
-    temp_moves: int = 8  # moves sampled in proportion to the visits at the start of each game
+    temp_moves: int = 4  # moves sampled in proportion to the visits at the start of each game
     leaves: int = 1  # leaves per tree per network batch in self-play (virtual loss when > 1)
     symmetries: bool = True  # evaluate each leaf through a random symmetry
     # self-play
     games_per_gen: int = 480
     workers: int = 12  # CPU search processes (the GPU work is done by the main process)
     # learning
-    buffer_size: int = 250_000  # positions
+    buffer_size: int = 100_000  # positions
     batch_size: int = 512
-    reuse: float = 4.0  # average number of times each position is trained on
+    reuse: float = 10.0  # average number of times each position is trained on
     lr: float = 1e-3
     weight_decay: float = 1e-4
     augment: bool = True  # train on a random symmetry of each position
@@ -102,13 +102,23 @@ class Workers:
     def match(self, spec_a, spec_b, env_name: str, n_games: int, opening_plies: int, seed: int,
               names: tuple[str, str] = ('a', 'b')) -> MatchResult:
         """Like `arena.evaluate` (same openings and colors), with the games split among the workers."""
+        return self.matches([(spec_a, spec_b, names)], env_name, n_games, opening_plies, seed)[0]
+
+    def matches(self, pairings: list[tuple], env_name: str, n_games: int, opening_plies: int, seed: int,
+                games_per_task: int | None = None) -> list[MatchResult]:
+        """Several matches `(spec_a, spec_b, (name_a, name_b))` at once, all from the same openings."""
         openings = match_openings(env_name, n_games, opening_plies, seed)
-        chunks = [c for c in np.array_split(np.arange(n_games), self.n) if len(c)]
-        result = MatchResult(*names, env_name)
-        for games in self.server.run(selfplay.match_task, [(spec_a, spec_b, env_name, [openings[g] for g in c], int(c[0]),
-                                                    seed + k) for k, c in enumerate(chunks)]):
-            result.games += games
-        return result
+        per_task = games_per_task or math.ceil(n_games * len(pairings) / self.n)
+        chunks = [c for c in np.array_split(np.arange(n_games), math.ceil(n_games / per_task)) if len(c)]
+        tasks, owners = [], []
+        for p, (spec_a, spec_b, _) in enumerate(pairings):
+            for k, c in enumerate(chunks):
+                tasks.append((spec_a, spec_b, env_name, [openings[g] for g in c], int(c[0]), seed + k))
+                owners.append(p)
+        results = [MatchResult(*names, env_name) for _, _, names in pairings]
+        for p, games in zip(owners, self.server.run(selfplay.match_task, tasks)):
+            results[p].games += games
+        return results
 
     def close(self):
         self.server.close()

@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 import numpy as np
+from stage5_alphazero import OMOK9_ABLATIONS, git_commit
 
 OUT = Path('runs/stage5/eval')
 RUNS = Path('runs/stage5')
@@ -65,19 +66,131 @@ def tictactoe(run: str = 'main-seed0', simulations: int = 50) -> dict:
     return dict(run=run, simulations=simulations, positions=len(positions), curve=points)
 
 
+# ---------------------------------------------------------------- matches on the workers
+
+PPO = 'runs/stage3/entropy/ent0.03-seed0.pt'  # Stage 3's best policy network (0.42 vs heuristic)
+DQN = 'runs/stage2/omok9/all-seed0.pt'  # Stage 2's best omok9 Q-network (0.575 vs heuristic)
+GAMES, OPENINGS = 100, 4  # as in Stages 2-4: 50 random 4-move openings, each played once per color
+
+
+class Players:
+    """AlphaZero checkpoints registered with the inference server, by name; other players are agent names."""
+
+    def __init__(self, workers, size: int | None = None):
+        self.workers, self.size, self.c_puct = workers, size, {}
+
+    def az(self, path: str, simulations: int, name: str | None = None) -> dict:
+        """A player spec; `size` (if given) overrides the board size the network was trained on."""
+        from omok_rl.nets import NetEvaluator
+
+        net_id = str(path)
+        if net_id not in self.c_puct:
+            net, ckpt = load_net(path)
+            self.workers.evaluators[net_id] = NetEvaluator(net, 'cuda', self.size or ckpt['size'], seed=0)
+            self.c_puct[net_id] = ckpt['config']['c_puct']
+        return dict(net=net_id, simulations=simulations, c_puct=self.c_puct[net_id],
+                    name=name or f'{Path(path).stem}-{simulations}')
+
+
+def summary(r) -> dict:
+    from omok.env import PLAYER_BLACK, PLAYER_WHITE
+
+    return dict(a=r.agent_a, b=r.agent_b, score=r.score(), win_black=r.rate('win', PLAYER_BLACK),
+                win_white=r.rate('win', PLAYER_WHITE), draws=r.rate('draw'), games=len(r.games),
+                game_length=float(np.mean([len(g.moves) for g in r.games])),
+                records=[dict(a_color=g.a_color, winner=g.winner, moves=g.moves) for g in r.games])
+
+
+def bradley_terry(names: list[str], results: list[tuple[int, int, float, int]], anchor: str, iters: int = 2000):
+    """Elo ratings from (i, j, score of i, games) results: P(i beats j) = 1 / (1 + 10 ** ((R_j - R_i) / 400)).
+
+    A virtual draw is added to every pairing, so that a 100% result gives a large but finite gap."""
+    k = len(names)
+    wins = np.zeros((k, k))
+    games = np.zeros((k, k))
+    for i, j, score, n in results:
+        wins[i, j] += score * n + 0.5
+        wins[j, i] += (1 - score) * n + 0.5
+        games[i, j] += n + 1
+        games[j, i] += n + 1
+    r = np.zeros(k)
+    for _ in range(iters):  # minorization-maximization (Hunter 2004) on gamma = exp(r)
+        gamma = np.exp(r)
+        denom = (games / (gamma[:, None] + gamma[None, :])).sum(1)
+        r = np.log(wins.sum(1) / denom)
+        r -= r[names.index(anchor)]
+    return r * 400 / np.log(10)
+
+
+def elo(run: str = 'omok9/main-seed0', simulations: int = 200, games: int = 40, every: int = 5) -> dict:
+    """Round-robin between every `every`-th saved generation of a run and the heuristic."""
+    from omok_rl.alphazero import Workers
+
+    paths = sorted((RUNS / run).glob('gen-*.pt'))
+    paths = [p for p in paths if int(p.stem[4:]) % every == 0]
+    env_name = run.split('/')[0]
+    workers = Workers(12)
+    players = Players(workers)
+    entries = [players.az(p, simulations, name=p.stem) for p in paths] + ['heuristic']
+    names = [p.stem for p in paths] + ['heuristic']
+    pairs = [(i, j) for i in range(len(entries)) for j in range(i + 1, len(entries))]
+    results = workers.matches([(entries[i], entries[j], (names[i], names[j])) for i, j in pairs], env_name, games,
+                              OPENINGS, seed=0, games_per_task=games // 2)
+    workers.close()
+    table = [(i, j, r.score(), len(r.games)) for (i, j), r in zip(pairs, results)]
+    ratings = bradley_terry(names, table, 'heuristic')
+    rng = np.random.default_rng(0)  # bootstrap: resample the games of every pairing
+    boot = []
+    for _ in range(200):
+        sample = []
+        for (i, j), r in zip(pairs, results):
+            s = np.array([1.0 if g.winner == g.a_color else 0.5 if g.winner == 0 else 0.0 for g in r.games])
+            sample.append((i, j, float(rng.choice(s, len(s)).mean()), len(s)))
+        boot.append(bradley_terry(names, sample, 'heuristic', iters=500))
+    boot = np.array(boot)
+    return dict(run=run, simulations=simulations, games_per_pair=games, names=names, elo=ratings.tolist(),
+                elo_low=np.percentile(boot, 2.5, axis=0).tolist(), elo_high=np.percentile(boot, 97.5, axis=0).tolist(),
+                matches=[dict(a=names[i], b=names[j], score=r.score(), games=len(r.games)) for (i, j), r in zip(pairs, results)])
+
+
+def versus(env_name: str, pairings: list[tuple]) -> dict:
+    """Matches (a, b) where a and b are (checkpoint path, simulations) or agent names; 100 games each."""
+    from omok_rl.alphazero import Workers
+
+    workers = Workers(12)
+    players = Players(workers)
+    spec = lambda p: players.az(*p) if isinstance(p, tuple) else p
+    label = lambda p: f'{Path(p[0]).parent.name}/{Path(p[0]).stem}-{p[1]}' if isinstance(p, tuple) else Path(p).stem
+    start = time.perf_counter()
+    results = workers.matches([(spec(a), spec(b), (label(a), label(b))) for a, b in pairings], env_name, GAMES,
+                              OPENINGS, seed=0)
+    workers.close()
+    return dict(env=env_name, seconds=time.perf_counter() - start, matches=[summary(r) for r in results])
+
+
 # ---------------------------------------------------------------- jobs
+
+MAIN9 = 'runs/stage5/omok9/main-seed0.pt'
 
 
 def jobs():
-    return [('tictactoe', tictactoe, ())]
+    out = [('tictactoe', tictactoe, ())]
+    out.append(('omok9-elo', elo, ()))
+    out.append(('omok9-previous-stages', versus, ('omok9', [
+        ((MAIN9, 200), 'mcts-heuristic:3200'), ((MAIN9, 200), 'alphabeta:5'), ((MAIN9, 200), DQN), ((MAIN9, 200), PPO),
+        ((MAIN9, 0), 'heuristic'), ((MAIN9, 0), DQN), ((MAIN9, 0), PPO)])))
+    out.append(('omok9-simulations', versus, ('omok9', [((MAIN9, n), 'alphabeta:5')
+                                                        for n in (0, 25, 50, 100, 200, 400, 800, 1600)])))
+    ablations = [f'{a}-seed0' for a in OMOK9_ABLATIONS]
+    out.append(('omok9-ablations', versus, ('omok9', [((f'runs/stage5/omok9/{a}.pt', 200), (MAIN9, 200))
+                                                      for a in ablations])))
+    return out
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--only', help='run only this job')
     args = parser.parse_args()
-    from stage5_alphazero import git_commit
-
     commit = git_commit()
     for name, fn, fn_args in jobs():
         if args.only not in (None, name):
