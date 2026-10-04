@@ -113,10 +113,101 @@ def selfplay_speed():
         print(f'| {label} | {sp:.1f} | {moves / sp:,.0f} | {samples:,.0f} |')
 
 
+# ---------------------------------------------------------------- 15x15
+
+LARGE = {  # label -> (run path, color, line style)
+    'freestyle15, Gumbel 50, from scratch': (RUNS / 'freestyle15' / 'gumbel50-scratch-seed0', SLOTS[1], '-'),
+    'freestyle15, Gumbel 50, from omok9': (RUNS / 'freestyle15' / 'gumbel50-transfer-seed0', SLOTS[0], '-'),
+    'renju15, Gumbel 50, from freestyle15': (RUNS / 'renju15' / 'gumbel50-transfer-seed0', SLOTS[2], '-'),
+    'Stage 5: freestyle15, PUCT 200, from scratch': (STAGE5 / 'freestyle15' / 'scratch-seed0', SLOTS[1], ':'),
+    'Stage 5: freestyle15, PUCT 200, from omok9': (STAGE5 / 'freestyle15' / 'transfer-seed0', SLOTS[0], ':'),
+    'Stage 5: renju15, PUCT 200, from freestyle15': (STAGE5 / 'renju15' / 'transfer-seed0', SLOTS[2], ':'),
+}
+
+
+def large_boards():
+    runs = {k: (load_run(p), c, ls) for k, (p, c, ls) in LARGE.items()}
+    runs = {k: v for k, v in runs.items() if v[0] and v[0]['curve']}
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.2))
+    for label, (run, color, ls) in runs.items():
+        c = run['curve']
+        kw = dict(color=color, ls=ls, lw=1.8 if ls == '-' else 1.4, label=label)
+        axes[0].plot(*series(c, 'score_vs_heuristic_search'), marker='o', ms=3, **kw)
+        axes[1].plot(*series(c, 'game_length'), **kw)
+        axes[2].plot(*series(c, 'black_wins'), **kw)
+    axes[0].set_ylim(0, 1.02)
+    axes[0].set_ylabel('Score vs the heuristic (with search)')
+    axes[1].set_ylabel('Self-play game length (moves)')
+    axes[2].set_ylabel('Self-play games won by Black')
+    axes[2].set_ylim(0, 1.02)
+    axes[0].set_title('15x15: score against the heuristic')
+    axes[1].set_title('Self-play game length')
+    axes[2].set_title('Share of self-play games won by Black')
+    for ax in axes:
+        ax.set_xlabel('Generation (480 self-play games each)')
+    axes[0].legend(loc='center right', fontsize=7)
+    save(fig, 'large-boards.png')
+
+    print('\n### 15x15 runs (score vs heuristic with the run\'s own search, 200 sims)\n')
+    print('| Run | Gen 5 | Gen 10 | Gen 20 | Gen 30 | Gen 60 | Raw policy, last | Minutes | Self-play length, last 10 gens | '
+          'Black wins, last 10 gens |')
+    print('|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|')
+    for label, (run, _, _) in runs.items():
+        c = run['curve']
+        scores = dict(zip(*series(c, 'score_vs_heuristic_search')))
+        raw = series(c, 'score_vs_heuristic_raw')[1]
+        cells = ' | '.join(f'{scores[g]:.2f}' if g in scores else '–' for g in (5, 10, 20, 30, 60))
+        last = c[-10:]
+        print(f'| {label} | {cells} | {raw[-1]:.2f} | {cost(c) * 60:.0f} | '
+              f'{np.mean([p["game_length"] for p in last]):.1f} | {np.mean([p["black_wins"] for p in last]):.0%} |')
+
+
+def versus_table(name: str, title: str):
+    r = load_json(RUNS / 'eval' / f'{name}.json')
+    if not r:
+        return None
+    print(f'\n### {title} ({r["wall_seconds"] / 60:.0f} min, commit {r["commit"]})\n')
+    print('| A | B | A score | A wins as black | A wins as white | Draws | Moves per game |')
+    print('|---|---|---:|---:|---:|---:|---:|')
+    for m in r['matches']:
+        print(f'| {m["a"]} | {m["b"]} | {m["score"]:.2f} | {m["win_black"]:.0%} | {m["win_white"]:.0%} | '
+              f'{m["draws"]:.0%} | {m["game_length"]:.1f} |')
+    return r
+
+
+def asymmetry():
+    """Black's advantage: self-play results under freestyle and Renju, and color splits of the evaluation games."""
+    print('\n### Black / White asymmetry\n')
+    print('| Setting | Black wins | White wins | Draws | Games |')
+    print('|---|---:|---:|---:|---:|')
+    for label in ('freestyle15, Gumbel 50, from omok9', 'renju15, Gumbel 50, from freestyle15'):
+        run = load_run(LARGE[label][0])
+        if not run:
+            continue
+        last = run['curve'][-10:]
+        b = np.mean([p['black_wins'] for p in last])
+        d = np.mean([p['draws'] for p in last])
+        print(f'| self-play, {label}, last 10 generations | {b:.0%} | {1 - b - d:.0%} | {d:.0%} | {480 * len(last):,} |')
+    for name in ('freestyle15-final', 'renju15-final'):
+        r = load_json(RUNS / 'eval' / f'{name}.json')
+        if not r:
+            continue
+        games = [g for m in r['matches'] for g in m['records']]
+        black = np.mean([g['winner'] == 1 for g in games])
+        white = np.mean([g['winner'] == 2 for g in games])
+        print(f'| all evaluation games, {r["env"]} | {black:.0%} | {white:.0%} | {1 - black - white:.0%} | {len(games):,} |')
+
+
 def main():
     IMAGES.mkdir(parents=True, exist_ok=True)
     omok9()
     selfplay_speed()
+    versus_table('omok9-vs-main30', 'omok9: 30-generation networks against Stage 5 main at generation 30 (PUCT 200)')
+    versus_table('omok9-search-at-play', 'omok9: PUCT vs Gumbel search at play time, Stage 5 final network vs alpha-beta depth 5')
+    large_boards()
+    versus_table('freestyle15-final', 'freestyle15: final networks')
+    versus_table('renju15-final', 'renju15: final network')
+    asymmetry()
 
 
 if __name__ == '__main__':

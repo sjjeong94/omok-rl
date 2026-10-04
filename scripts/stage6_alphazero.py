@@ -37,6 +37,9 @@ def experiments():
     freestyle = AZConfig(env='freestyle15', search='gumbel', simulations=50, generations=60)
     runs.append(('freestyle15', 'gumbel50-scratch-seed0', freestyle))
     runs.append(('freestyle15', 'gumbel50-transfer-seed0', replace(freestyle, init=STAGE5_OMOK9)))
+    # Renju starts from the transferred freestyle network (its extra input plane, forbidden points, starts at zero)
+    runs.append(('renju15', 'gumbel50-transfer-seed0',
+                 replace(freestyle, env='renju15', init=str(OUT / 'freestyle15' / 'gumbel50-transfer-seed0.pt'))))
     return runs
 
 

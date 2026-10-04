@@ -16,6 +16,7 @@ uv sync                        # create .venv with Python 3.12, omok[fast], nump
 uv run pytest                  # run the tests
 uv run omok-arena heuristic random --env omok9 --games 200   # play a match between two agents
 uv run python -m omok          # play in the browser (http://127.0.0.1:8000)
+uv run python -m omok_rl.play runs/stage6/renju15/gumbel50-transfer-seed0.pt --rule renju   # play our AlphaZero network (train it first: scripts/stage6_alphazero.py)
 ```
 
 `omok[fast]` compiles the Renju forbidden-move check with numba (~30x faster). PyTorch (Stage 2+) uses the GPU when CUDA is available.
@@ -113,6 +114,8 @@ Grow the board only when needed: `3x3 (3 in a row) → 6x6 (4 in a row) → 9x9 
 - **Experiments**: Elo curve across generations, games against `omok.OmokAgent`
 
 ### Stage 6. Advanced (Optional)
+- **Done**: Gumbel AlphaZero, playout cap randomization, tree reuse, 15x15 freestyle and Renju, Black/White asymmetry, ONNX export + web UI
+  ([docs](docs/stage6-advanced/README.md)); not attempted: MuZero, KataGo auxiliary targets, TensorRT
 - Efficiency: multi-process self-play, ONNX/TensorRT inference, tree reuse
 - Recent techniques: Gumbel AlphaZero (few simulations), KataGo-style auxiliary targets, MuZero (learned model)
 - Opening diversity, analysis of black/white asymmetry under Renju
@@ -134,11 +137,12 @@ omok-rl/
 │   ├── replay.py          # replay buffer with two-player n-step returns
 │   ├── dqn.py             # DQN self-play training (python -m omok_rl.dqn)
 │   ├── pg.py              # REINFORCE / A2C / PPO self-play training (python -m omok_rl.pg)
-│   ├── puct.py            # batched PUCT search (numpy only)
+│   ├── puct.py            # batched PUCT and Gumbel search (numpy only)
 │   ├── inference.py       # GPU inference server for CPU search workers
 │   ├── selfplay.py        # self-play games and batched matches
 │   ├── alphazero.py       # AlphaZero training loop (python -m omok_rl.alphazero)
 │   ├── arena.py           # matches & win-rate evaluation (omok-arena CLI)
+│   ├── play.py            # ONNX export and the web UI player (python -m omok_rl.play)
 │   ├── viz.py             # board drawing for docs figures
 │   └── ...                # more modules in later stages
 ├── scripts/               # per-stage training/evaluation scripts
@@ -155,6 +159,9 @@ omok-rl/
 │   ├── stage5_alphazero.py
 │   ├── stage5_eval.py
 │   ├── plot_stage5.py
+│   ├── stage6_alphazero.py
+│   ├── stage6_eval.py
+│   ├── plot_stage6.py
 │   └── ...
 ├── docs/                  # per-stage study log & experiment results (see docs/README.md)
 └── tests/
@@ -181,7 +188,7 @@ uv run omok-arena ppo heuristic --env omok9 --games 200   # colors alternate eve
 - [x] Stage 3 — REINFORCE / A2C / PPO ([docs](docs/stage3-pg/README.md))
 - [x] Stage 4 — Alpha-beta, MCTS ([docs](docs/stage4-search/README.md))
 - [x] Stage 5 — AlphaZero: 9x9 done, 15x15 left open ([docs](docs/stage5-alphazero/README.md))
-- [ ] Stage 6 — Advanced
+- [x] Stage 6 — Gumbel AlphaZero, tree reuse, 15x15 freestyle and Renju, ONNX + web UI ([docs](docs/stage6-advanced/README.md))
 
 ## 7. References
 
